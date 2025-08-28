@@ -7,13 +7,24 @@ import (
 
 type Todo struct {
 	gorm.Model
-	User        string
+	UserId      uint
 	Description string `json:"description"`
 	Done        bool
 }
 type APITodo struct {
 	Description string
 	Done        bool
+}
+type User struct {
+	gorm.Model
+	Username string
+	Password string
+	Todo     []Todo
+}
+
+type APIUser struct {
+	Username string
+	Pas      string
 }
 
 func database() *gorm.DB {
@@ -23,6 +34,6 @@ func database() *gorm.DB {
 		panic("failed to connect database")
 	}
 
-	db.AutoMigrate(&Todo{})
+	db.AutoMigrate(&Todo{}, &User{})
 	return db
 }
