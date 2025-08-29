@@ -12,6 +12,7 @@ type Todo struct {
 	Done        bool
 }
 type APITodo struct {
+	ID          uint
 	Description string
 	Done        bool
 }

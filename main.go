@@ -13,8 +13,7 @@ type header struct {
 }
 
 type updateTodo struct {
-	OldDescription string `json:"oldDescription"`
-	NewDescription string `json:"newDescription"`
+	Description string `json:"description"`
 }
 
 var user string
@@ -87,22 +86,22 @@ func main() {
 
 		user := c.Locals("user").(*User)
 
-		db.Create(&Todo{UserId: user.ID, Description: t.Description})
+		t.UserId = user.ID
+		db.Create(&t)
 
-		return c.JSON(APITodo{t.Description, t.Done})
+		return c.JSON(APITodo{t.ID, t.Description, t.Done})
 	})
 
-	app.Delete("/", func(c *fiber.Ctx) error {
-		t := new(Todo)
-		if err := c.BodyParser(t); err != nil || t.Description == "" {
-			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-				"error": "please provide description in json",
-			})
-		}
+	app.Delete("/:id", func(c *fiber.Ctx) error {
+		id := c.Params("id")
 
+		if id == "" {
+			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{"error": "please provide id in url"})
+		}
 		user := c.Locals("user").(*User)
 
-		res := db.Where("description = ? AND user_id = ?", t.Description, user.ID).Delete(&Todo{})
+		res := db.Where("id = ? AND user_id = ?", id, user.ID).Delete(&Todo{})
+
 		if res.Error != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to delete todo"})
 		}
@@ -110,49 +109,48 @@ func main() {
 			return c.Status(404).JSON(fiber.Map{"error": "todo not found"})
 		}
 
-		return c.JSON(APITodo{t.Description, t.Done})
+		return c.Status(204).JSON(fiber.Map{"message": "todo deleted"})
 	})
 
-	app.Patch("/", func(c *fiber.Ctx) error {
+	app.Patch("/:id", func(c *fiber.Ctx) error {
+		id := c.Params("id")
 		t := new(updateTodo)
 		err := c.BodyParser(t)
 
-		if err != nil || t.NewDescription == "" || t.OldDescription == "" {
+		if id == "" {
+			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{"error": "please provide id in url"})
+		}
+
+		if err != nil || t.Description == "" {
 			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-				"error": "please provide OldDescription,NewDescription in json",
+				"error": "please provide Description in json",
 			})
 		}
 
 		user := c.Locals("user").(*User)
 
 		var todo Todo
-		res := db.Where("description = ? AND user_id = ?", t.OldDescription, user.ID).First(&todo)
+		res := db.Where("ID = ? AND user_id = ?", id, user.ID).First(&todo)
 		if res.Error != nil {
 			return c.Status(404).JSON(fiber.Map{"error": "todo not found"})
 		}
 
-		todo.Description = t.NewDescription
+		todo.Description = t.Description
 		if err := db.Save(&todo).Error; err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to update todo"})
 		}
 
-		return c.JSON(APITodo{todo.Description, todo.Done})
+		return c.JSON(APITodo{todo.ID, todo.Description, todo.Done})
 	})
 
-	app.Post("/toggle", func(c *fiber.Ctx) error {
-		t := new(Todo)
-		if err := c.BodyParser(t); err != nil || t.Description == "" {
-			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
-				"error": "please provide description in json",
-			})
-		}
-
+	app.Post("/toggle/:id", func(c *fiber.Ctx) error {
+		id := c.Params("id")
 		user := c.Locals("user").(*User)
 
 		var todo Todo
-		res := db.Where("description = ? AND user_id = ?", t.Description, user.ID).First(&todo)
+		res := db.Where("ID = ? AND user_id = ?", id, user.ID).First(&todo)
 		if res.Error != nil {
-			return c.Status(404).JSON(fiber.Map{"error": "No todo found with that description"})
+			return c.Status(404).JSON(fiber.Map{"error": "todo not found"})
 		}
 
 		todo.Done = !todo.Done
@@ -160,7 +158,7 @@ func main() {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to toggle todo"})
 		}
 
-		return c.JSON(APITodo{todo.Description, todo.Done})
+		return c.JSON(APITodo{todo.ID, todo.Description, todo.Done})
 	})
 
 	log.Fatal(app.Listen(":3000"))
