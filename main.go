@@ -74,6 +74,16 @@ func main() {
 		return c.JSON(todos)
 	})
 
+	app.Get("/:id", func(c *fiber.Ctx) error {
+		user := c.Locals("user").(*User)
+		id := c.Params("id")
+		var todo APITodo
+
+		db.Model(&Todo{}).Where("user_id = ? AND id = ?", user.ID, id).Find(&todo)
+
+		return c.JSON(todo)
+	})
+
 	app.Post("/", func(c *fiber.Ctx) error {
 		t := new(Todo)
 		err := c.BodyParser(t)

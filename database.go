@@ -29,7 +29,7 @@ type APIUser struct {
 }
 
 func database() *gorm.DB {
-	var db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	var db, err = gorm.Open(sqlite.Open("db.sqlite"), &gorm.Config{})
 
 	if err != nil {
 		panic("failed to connect database")
