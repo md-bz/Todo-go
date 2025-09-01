@@ -1,11 +1,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/joho/godotenv"
 )
 
 type header struct {
@@ -19,6 +24,15 @@ type updateTodo struct {
 var user string
 
 func main() {
+	envErr := godotenv.Load()
+	if envErr != nil {
+		log.Fatal("Error loading .env file")
+	}
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("Error loading JWT_SECRET from .env file")
+	}
+
 	app := fiber.New()
 
 	db := database()
@@ -32,12 +46,57 @@ func main() {
 			})
 		}
 
-		db.Model(&User{}).Create(&User{Username: user.Username, Password: user.Password})
-		return c.JSON(APIUser{user.Username, user.Password})
+		dbErr := db.Model(&User{}).Create(&User{Username: user.Username, Password: user.Password})
+
+		if dbErr.Error != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error": "failed to sign up",
+			})
+		}
+
+		return c.Status(201).JSON(fiber.Map{
+			"message": "login to get token",
+		})
+	})
+
+	app.Post("/login", func(c *fiber.Ctx) error {
+		user := new(User)
+		err := c.BodyParser(user)
+		if err != nil || user.Username == "" || user.Password == "" {
+			return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
+				"error": "please provide Username and Password in json",
+			})
+		}
+
+		res := db.Where(&User{Username: user.Username}).First(&user)
+
+		if res.Error != nil {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "User not found",
+			})
+		}
+
+		if user.Password != user.Password {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "Unauthorized",
+			})
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"id":  user.ID,
+			"exp": jwt.NewNumericDate(time.Now().Add(time.Hour * 7 * 24)),
+		})
+
+		tokenString, err := token.SignedString([]byte(jwtSecret))
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error": "failed to generate token",
+			})
+		}
+		return c.JSON(APIUser{user.Username, tokenString})
 	})
 
 	app.Use(func(c *fiber.Ctx) error {
-		// placeholder for jwt
 		h := new(header)
 		err := c.ReqHeaderParser(h)
 
@@ -45,19 +104,44 @@ func main() {
 
 		if err != nil || h.Authorization == "" || len(auth) != 2 || auth[0] != "Bearer" || auth[1] == "" {
 			return c.Status(403).JSON(fiber.Map{
-				"error": "Unauthorized",
+				"error": "No Authorization header",
 			})
 		}
 
 		var user User
-		res := db.Model(&User{}).
-			Where(&User{Username: strings.Trim(auth[1], " ")}).
+		token, err := jwt.Parse(auth[1], func(token *jwt.Token) (any, error) {
+			return []byte(jwtSecret), nil
+		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "Token is expired",
+			})
+		}
+
+		if err != nil || !token.Valid {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "Token is invalid",
+			})
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "Token is invalid",
+			})
+		}
+
+		userId := claims["id"]
+
+		res := db.
+			Where("ID = ?", userId).
 			First(&user)
 
 		if res.Error != nil {
 			fmt.Print(err)
 			return c.Status(403).JSON(fiber.Map{
-				"error": "Unauthorized",
+				"error": "User not found",
 			})
 		}
 		c.Locals("user", &user)

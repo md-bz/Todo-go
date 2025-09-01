@@ -25,7 +25,7 @@ type User struct {
 
 type APIUser struct {
 	Username string
-	Pas      string
+	Token    string
 }
 
 func database() *gorm.DB {
