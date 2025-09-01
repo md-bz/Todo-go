@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"gorm.io/driver/sqlite"
@@ -28,7 +28,9 @@ type APIUser struct {
 	Token    string
 }
 
-func database() *gorm.DB {
+var DB *gorm.DB
+
+func init() {
 	var db, err = gorm.Open(sqlite.Open("db.sqlite"), &gorm.Config{})
 
 	if err != nil {
@@ -36,5 +38,5 @@ func database() *gorm.DB {
 	}
 
 	db.AutoMigrate(&Todo{}, &User{})
-	return db
+	DB = db
 }

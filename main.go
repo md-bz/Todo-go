@@ -1,6 +1,7 @@
 package main
 
 import (
+	. "api/database"
 	"errors"
 	"fmt"
 	"log"
@@ -35,8 +36,6 @@ func main() {
 
 	app := fiber.New()
 
-	db := database()
-
 	app.Post("/signup", func(c *fiber.Ctx) error {
 		user := new(User)
 		err := c.BodyParser(user)
@@ -46,7 +45,7 @@ func main() {
 			})
 		}
 
-		dbErr := db.Model(&User{}).Create(&User{Username: user.Username, Password: user.Password})
+		dbErr := DB.Model(&User{}).Create(&User{Username: user.Username, Password: user.Password})
 
 		if dbErr.Error != nil {
 			return c.Status(500).JSON(fiber.Map{
@@ -68,7 +67,7 @@ func main() {
 			})
 		}
 
-		res := db.Where(&User{Username: user.Username}).First(&user)
+		res := DB.Where(&User{Username: user.Username}).First(&user)
 
 		if res.Error != nil {
 			return c.Status(403).JSON(fiber.Map{
@@ -93,7 +92,7 @@ func main() {
 				"error": "failed to generate token",
 			})
 		}
-		return c.JSON(APIUser{user.Username, tokenString})
+		return c.JSON(APIUser{Username: user.Username, Token: tokenString})
 	})
 
 	app.Use(func(c *fiber.Ctx) error {
@@ -134,7 +133,7 @@ func main() {
 
 		userId := claims["id"]
 
-		res := db.
+		res := DB.
 			Where("ID = ?", userId).
 			First(&user)
 
@@ -153,7 +152,7 @@ func main() {
 		var todos []APITodo
 		user := c.Locals("user").(*User)
 
-		db.Model(&Todo{}).Where(&Todo{UserId: user.ID}).Find(&todos)
+		DB.Model(&Todo{}).Where(&Todo{UserId: user.ID}).Find(&todos)
 
 		return c.JSON(todos)
 	})
@@ -163,7 +162,7 @@ func main() {
 		id := c.Params("id")
 		var todo APITodo
 
-		db.Model(&Todo{}).Where("user_id = ? AND id = ?", user.ID, id).Find(&todo)
+		DB.Model(&Todo{}).Where("user_id = ? AND id = ?", user.ID, id).Find(&todo)
 
 		return c.JSON(todo)
 	})
@@ -181,9 +180,9 @@ func main() {
 		user := c.Locals("user").(*User)
 
 		t.UserId = user.ID
-		db.Create(&t)
+		DB.Create(&t)
 
-		return c.JSON(APITodo{t.ID, t.Description, t.Done})
+		return c.JSON(APITodo{ID: t.ID, Description: t.Description, Done: t.Done})
 	})
 
 	app.Delete("/:id", func(c *fiber.Ctx) error {
@@ -194,7 +193,7 @@ func main() {
 		}
 		user := c.Locals("user").(*User)
 
-		res := db.Where("id = ? AND user_id = ?", id, user.ID).Delete(&Todo{})
+		res := DB.Where("id = ? AND user_id = ?", id, user.ID).Delete(&Todo{})
 
 		if res.Error != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to delete todo"})
@@ -224,17 +223,17 @@ func main() {
 		user := c.Locals("user").(*User)
 
 		var todo Todo
-		res := db.Where("ID = ? AND user_id = ?", id, user.ID).First(&todo)
+		res := DB.Where("ID = ? AND user_id = ?", id, user.ID).First(&todo)
 		if res.Error != nil {
 			return c.Status(404).JSON(fiber.Map{"error": "todo not found"})
 		}
 
 		todo.Description = t.Description
-		if err := db.Save(&todo).Error; err != nil {
+		if err := DB.Save(&todo).Error; err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to update todo"})
 		}
 
-		return c.JSON(APITodo{todo.ID, todo.Description, todo.Done})
+		return c.JSON(APITodo{ID: todo.ID, Description: todo.Description, Done: todo.Done})
 	})
 
 	app.Post("/toggle/:id", func(c *fiber.Ctx) error {
@@ -242,17 +241,17 @@ func main() {
 		user := c.Locals("user").(*User)
 
 		var todo Todo
-		res := db.Where("ID = ? AND user_id = ?", id, user.ID).First(&todo)
+		res := DB.Where("ID = ? AND user_id = ?", id, user.ID).First(&todo)
 		if res.Error != nil {
 			return c.Status(404).JSON(fiber.Map{"error": "todo not found"})
 		}
 
 		todo.Done = !todo.Done
-		if err := db.Save(&todo).Error; err != nil {
+		if err := DB.Save(&todo).Error; err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to toggle todo"})
 		}
 
-		return c.JSON(APITodo{todo.ID, todo.Description, todo.Done})
+		return c.JSON(APITodo{ID: todo.ID, Description: todo.Description, Done: todo.Done})
 	})
 
 	log.Fatal(app.Listen(":3000"))
