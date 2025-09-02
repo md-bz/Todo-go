@@ -2,16 +2,12 @@ package main
 
 import (
 	. "api/database"
-	"errors"
+	"api/helpers"
 	"fmt"
 	"log"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/joho/godotenv"
 )
 
 type header struct {
@@ -25,14 +21,6 @@ type updateTodo struct {
 var user string
 
 func main() {
-	envErr := godotenv.Load()
-	if envErr != nil {
-		log.Fatal("Error loading .env file")
-	}
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		log.Fatal("Error loading JWT_SECRET from .env file")
-	}
 
 	app := fiber.New()
 
@@ -80,16 +68,10 @@ func main() {
 				"error": "Unauthorized",
 			})
 		}
-
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"id":  user.ID,
-			"exp": jwt.NewNumericDate(time.Now().Add(time.Hour * 7 * 24)),
-		})
-
-		tokenString, err := token.SignedString([]byte(jwtSecret))
+		tokenString, err := helpers.CreateJWT(user.ID)
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{
-				"error": "failed to generate token",
+				"error": err.Error(),
 			})
 		}
 		return c.JSON(APIUser{Username: user.Username, Token: tokenString})
@@ -108,30 +90,12 @@ func main() {
 		}
 
 		var user User
-		token, err := jwt.Parse(auth[1], func(token *jwt.Token) (any, error) {
-			return []byte(jwtSecret), nil
-		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
-
-		if errors.Is(err, jwt.ErrTokenExpired) {
+		userId, err := helpers.VerifyJWT(auth[1])
+		if err != nil {
 			return c.Status(403).JSON(fiber.Map{
-				"error": "Token is expired",
+				"error": err.Error(),
 			})
 		}
-
-		if err != nil || !token.Valid {
-			return c.Status(403).JSON(fiber.Map{
-				"error": "Token is invalid",
-			})
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			return c.Status(403).JSON(fiber.Map{
-				"error": "Token is invalid",
-			})
-		}
-
-		userId := claims["id"]
 
 		res := DB.
 			Where("ID = ?", userId).
