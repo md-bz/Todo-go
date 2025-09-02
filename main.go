@@ -55,19 +55,14 @@ func main() {
 			})
 		}
 
-		res := DB.Where(&User{Username: user.Username}).First(&user)
+		res := DB.Where(&User{Username: user.Username, Password: user.Password}).First(&user)
 
 		if res.Error != nil {
 			return c.Status(403).JSON(fiber.Map{
-				"error": "User not found",
+				"error": "Username or Password is incorrect",
 			})
 		}
 
-		if user.Password != user.Password {
-			return c.Status(403).JSON(fiber.Map{
-				"error": "Unauthorized",
-			})
-		}
 		tokenString, err := helpers.CreateJWT(user.ID)
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{
